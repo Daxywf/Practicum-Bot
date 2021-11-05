@@ -53,7 +53,7 @@ def send_message(bot, message):
 
 
 def get_api_answer(url, current_timestamp):
-    """Получает ответ от API Практикума"""
+    """Получает ответ от API Практикума."""
     headers = {'Authorization': PRACTICUM_TOKEN}
     payload = {'from_date': current_timestamp}
     response = requests.get(
