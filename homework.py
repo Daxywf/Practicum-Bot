@@ -41,7 +41,7 @@ logger.addHandler(handler)
 
 
 def send_message(bot, message):
-    """Отправляет сообщение пользователю в Telegram"""
+    """Отправляет сообщение пользователю в Telegram."""
     try:
         bot.send_message(CHAT_ID, message)
         logging.info(f'Бот отправил сообщение: {message}')
@@ -72,7 +72,7 @@ def get_api_answer(url, current_timestamp):
 
 
 def parse_status(homework):
-    """Получает последнюю работу и формирует сообщение пользователю"""
+    """Получает последнюю работу и формирует сообщение пользователю."""
     homework_name = homework.get('homework_name')
     status = homework.get('status')
     verdict = HOMEWORK_STATUSES[status]
@@ -80,7 +80,7 @@ def parse_status(homework):
 
 
 def check_response(response):
-    """Анализирует ответ API и возвращает последнюю домашнюю работу """
+    """Анализирует ответ API и возвращает последнюю домашнюю работу."""
     homeworks = response.get('homeworks')
     if not homeworks:
         message = 'Нет списка homeworks'
@@ -99,7 +99,7 @@ def check_response(response):
 
 
 def main():
-    """Запускает работу бота"""
+    """Запускает работу бота."""
     bot = Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     while True:
