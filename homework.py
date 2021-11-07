@@ -12,7 +12,7 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
-RETRY_TIME = 60 * 10
+RETRY_TIME = 10
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
@@ -23,8 +23,9 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 HEADERS = {'Authorization': PRACTICUM_TOKEN}
 MISSING_ENV_VARS = "Отсутствует одна из обязательных переменных окружения"
 REQUEST_ERROR = (
-    'Ошибка запроса.''Эндпоинт: {endpoint} '
-    'Код ответа API: {code}'
+    'Ошибка запроса.'
+    'Эндпоинт: {endpoint} '
+    'Код ответа API: {code} '
     'Параметры запроса: {headers}, {params}'
 )
 SERVER_ERROR = 'Ошибка сервера: {error}'
@@ -92,7 +93,7 @@ def parse_status(homework):
 
 def check_response(response):
     """Анализирует ответ API и возвращает последнюю домашнюю работу."""
-    homeworks = response['homeworks']
+    homeworks = response.get('homeworks')
     homework = homeworks[0]
     status = homework['status']
     if status not in HOMEWORK_VERDICTS:
@@ -105,8 +106,8 @@ def check_response(response):
 def main():
     """Запускает работу бота."""
     if TELEGRAM_TOKEN is None or PRACTICUM_TOKEN is None or CHAT_ID is None:
-        message = MISSING_ENV_VARS
-        logger.critical(message)
+        logger.critical(MISSING_ENV_VARS)
+        print(MISSING_ENV_VARS)
     bot = Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     while True:
