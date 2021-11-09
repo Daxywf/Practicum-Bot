@@ -5,8 +5,10 @@ from logging.handlers import RotatingFileHandler
 
 import requests
 from dotenv import load_dotenv
+from requests.exceptions import RequestException
 from requests.models import HTTPError
 from telegram import Bot
+import telegram
 
 load_dotenv()
 
@@ -26,22 +28,28 @@ MISSING_ENV_VARS = (
     "{variable}"
 )
 REQUEST_ERROR = (
-    'Ошибка запроса.'
-    'Эндпоинт: {endpoint} '
+    'Ошибка при выполнении запроса: {error}.'
+    'Эндпоинт: {url} '
+    'Параметры запроса: {headers}, {params}'
+)
+CODE_IS_NOT_200 = (
+    'Код ответа отличается от 200'
+    'Эндпоинт: {url} '
     'Код ответа API: {code} '
     'Параметры запроса: {headers}, {params}'
 )
 SERVER_ERROR = (
     'Ошибка сервера: {error}'
-    'Эндпоинт: {endpoint} '
+    'Код ошибки {server_code}'
+    'Эндпоинт: {url} '
     'Код ответа API: {code} '
     'Параметры запроса: {headers}, {params}'
 )
 NEW_STATUS = 'Изменился статус проверки работы "{homework_name}". {verdict}'
 ERROR_MESSAGE = 'Сбой в работе программы: {error}'
-SEND_ERROR = 'Боту не удалось отправить сообщение. Ошибка: {e}'
+SEND_ERROR = 'Боту не удалось отправить сообщение. Ошибка: {error}'
 MESSAGE_SENT = 'Бот отправил сообщение: {message}'
-BAD_STATUS = 'Неожиданный статус: {status}'
+UNEXPECTED_STATUS = 'Неожиданный статус: {status}'
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -69,35 +77,36 @@ def send_message(bot, message):
 def get_api_answer(url, current_timestamp):
     """Получает ответ от API Практикума."""
     payload = {'from_date': current_timestamp}
+    request_parameters = dict(
+        url=ENDPOINT,
+        headers=HEADERS,
+        params=payload
+    )
     try:
-        response = requests.get(
-            url,
-            headers=HEADERS,
-            params=payload
-        )
-    except ConnectionError:
-        raise ConnectionError(
-            'Ошибка сети. Параметры запроса: '
-            f'{url}, {HEADERS}, {payload}'
-        )
-    answer = response.json()
-    if 'code' and 'error' in answer.keys():
-        raise HTTPError(
-            SERVER_ERROR.format(
-                error=answer['error']['error'],
-                endpoint=ENDPOINT,
-                code=response.status_code,
-                headers=HEADERS,
-                params=payload
+        response = requests.get(**request_parameters)
+    except RequestException as error:
+        raise error(
+            REQUEST_ERROR.format(
+                error=error,
+                **request_parameters,
             )
         )
+    answer = response.json()
+    for key in answer.keys():
+        if key == 'code' or key == 'error':
+            raise RequestException(
+                SERVER_ERROR.format(
+                    error=answer['error'],
+                    sevrer_code=answer['code'],
+                    code=response.status_code,
+                    **request_parameters
+                )
+            )
     if response.status_code != 200:
-        raise HTTPError(
-            REQUEST_ERROR.format(
-                endpoint=ENDPOINT,
+        raise RequestException(
+            CODE_IS_NOT_200.format(
                 code=response.status_code,
-                headers=HEADERS,
-                params=payload
+                **request_parameters
             )
         )
     return answer
@@ -117,7 +126,7 @@ def check_response(response):
     homework = homeworks[0]
     status = homework['status']
     if status not in VERDICTS:
-        raise ValueError(BAD_STATUS.format(status=status))
+        raise ValueError(UNEXPECTED_STATUS.format(status=status))
     return homework
 
 
@@ -126,19 +135,22 @@ def main():
     for name in ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'CHAT_ID'):
         if globals()[name] is None:
             logger.critical(MISSING_ENV_VARS.format(variable=name))
+            raise NameError(MISSING_ENV_VARS.format(variable=name))
     bot = Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    timestamp = current_timestamp - RETRY_TIME
     while True:
         try:
-            answer = get_api_answer(ENDPOINT, timestamp)
+            answer = get_api_answer(ENDPOINT, current_timestamp - RETRY_TIME)
             homework = check_response(answer)
             verdict = parse_status(homework)
             send_message(bot, verdict)
         except Exception as error:
             message = ERROR_MESSAGE.format(error=error)
             logger.error(message)
-            send_message(bot, message)
+            try:
+                send_message(bot, message)
+            except telegram.TelegramError as error:
+                logger.error(SEND_ERROR.format(error=error))
         time.sleep(RETRY_TIME)
 
 
