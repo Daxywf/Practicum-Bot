@@ -4,11 +4,10 @@ import time
 from logging.handlers import RotatingFileHandler
 
 import requests
-import telegram
 from dotenv import load_dotenv
 from requests.exceptions import RequestException
-from requests.models import HTTPError
 from telegram import Bot
+import telegram
 
 load_dotenv()
 
@@ -137,9 +136,9 @@ def main():
             logger.critical(MISSING_ENV_VARS.format(variable=name))
             raise NameError(MISSING_ENV_VARS.format(variable=name))
     bot = Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time())
     while True:
         try:
+            current_timestamp = int(time.time())
             answer = get_api_answer(ENDPOINT, current_timestamp - RETRY_TIME)
             homework = check_response(answer)
             verdict = parse_status(homework)
