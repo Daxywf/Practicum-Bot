@@ -4,11 +4,11 @@ import time
 from logging.handlers import RotatingFileHandler
 
 import requests
+import telegram
 from dotenv import load_dotenv
 from requests.exceptions import RequestException
 from requests.models import HTTPError
 from telegram import Bot
-import telegram
 
 load_dotenv()
 
