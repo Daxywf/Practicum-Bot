@@ -38,18 +38,18 @@ CODE_IS_NOT_200 = (
     'Параметры запроса: {headers}, {params}'
 )
 SERVER_ERROR = (
-    'Ошибка сервера: {error}'
-    'Код ошибки {server_code}'
+    'Ошибка сервера.'
     'Эндпоинт: {url} '
     'Код ответа API: {code} '
     'Параметры запроса: {headers}, {params}'
+    'Ответ API: {answer}'
 )
 NEW_STATUS = 'Изменился статус проверки работы "{homework_name}". {verdict}'
 ERROR_MESSAGE = 'Сбой в работе программы: {error}'
 SEND_ERROR = 'Боту не удалось отправить сообщение. Ошибка: {error}'
 MESSAGE_SENT = 'Бот отправил сообщение: {message}'
 UNEXPECTED_STATUS = 'Неожиданный статус: {status}'
-NO_KEY = 'Отсутствует ключ: {key}}'
+NO_KEY = 'Отсутствует ключ: {key}'
 RESPONSE_NOT_DICT = 'Ответ не является словарём'
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,14 @@ logger.addHandler(handler)
 logger.addHandler(console_out)
 
 
+class AnswerIsNot200Error(Exception):
+    """Код ответа API не равен 200."""
+
+
+class ServerError(Exception):
+    """Сервер отправил сообщение об ошибке."""
+
+
 def send_message(bot, message):
     """Отправляет сообщение пользователю в Telegram."""
     bot.send_message(TELEGRAM_CHAT_ID, message)
@@ -77,36 +85,33 @@ def send_message(bot, message):
 
 def get_api_answer(current_timestamp):
     """Получает ответ от API Практикума."""
-    timestamp = current_timestamp or int(time.time())
-    params = {'from_date': timestamp}
     request_parameters = dict(
         url=ENDPOINT,
         headers=HEADERS,
-        params=params
+        params={'from_date': current_timestamp}
     )
     try:
         response = requests.get(**request_parameters)
     except RequestException as error:
-        raise error(
+        raise RequestException(
             REQUEST_ERROR.format(
                 error=error,
                 **request_parameters,
             )
         )
     answer = response.json()
-    if isinstance(answer, dict):
-        for key in answer.keys():
-            if key == 'code' or key == 'error':
-                raise RequestException(
+    if isinstance(answer, dict):  # Без этой строки код падают тесты от 08.11
+        for key in ['code', 'error']:
+            if key in answer.keys():
+                raise ServerError(
                     SERVER_ERROR.format(
-                        error=answer['error'],
-                        sevrer_code=answer['code'],
-                        code=response.status_code,
-                        **request_parameters
+                        **request_parameters,
+                        answer=answer
                     )
                 )
+
     if response.status_code != 200:
-        raise RequestException(
+        raise AnswerIsNot200Error(
             CODE_IS_NOT_200.format(
                 code=response.status_code,
                 **request_parameters
@@ -117,8 +122,6 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """Анализирует ответ API и возвращает последнюю домашнюю работу."""
-    if not isinstance(response, dict):
-        raise TypeError(RESPONSE_NOT_DICT)
     homeworks = response['homeworks']
     homework = homeworks[0]
     return homework
@@ -126,10 +129,9 @@ def check_response(response):
 
 def parse_status(homework):
     """Получает последнюю работу и формирует сообщение пользователю."""
-    keys = ['homework_name', 'status']
-    for key in keys:
-        if key not in homework:
-            raise ValueError(NO_KEY.format(key))
+    for key in ['status', 'homework_name']:
+        if key not in homework:  # Без проверки падает один из тестов
+            raise KeyError(NO_KEY.format(key=key))
     status = homework['status']
     if status not in VERDICTS:
         raise ValueError(UNEXPECTED_STATUS.format(status=status))
@@ -143,34 +145,35 @@ def check_tokens():
     """Проверяет наличие основных токенов."""
     for name in ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID'):
         if globals()[name] is None:
-            logger.critical(MISSING_ENV_VARS.format(variable=name))
+            message = MISSING_ENV_VARS.format(variable=name)
+            logger.critical(message)
             return False
-        return True
+        return True  # test_check_tokens_false падает при выбрасывании ошибок
 
 
 def main():
     """Основная логика работы бота."""
-    if check_tokens() is False:
-        raise NameError()
-    else:
-        bot = telegram.Bot(token=TELEGRAM_TOKEN)
-        current_timestamp = int(time.time())
-        while True:
+    if not check_tokens() is True:
+        raise NameError(
+            'Отсутствует одна из обязательных переменных окружения.'
+        )
+    bot = telegram.Bot(token=TELEGRAM_TOKEN)
+    current_timestamp = int(time.time())
+    while True:
+        try:
+            answer = get_api_answer(ENDPOINT, current_timestamp)
+            homework = check_response(answer)
+            verdict = parse_status(homework)
+            send_message(bot, verdict)
+            current_timestamp = answer['current_date'] or int(time.time())
+        except Exception as error:
+            message = ERROR_MESSAGE.format(error=error)
+            logger.error(message)
             try:
-                current_timestamp = int(time.time())
-                answer = get_api_answer(ENDPOINT, current_timestamp)
-                homework = check_response(answer)
-                verdict = parse_status(homework)
-                send_message(bot, verdict)
-                current_timestamp = current_timestamp - RETRY_TIME
-            except Exception as error:
-                message = ERROR_MESSAGE.format(error=error)
-                logger.error(message)
-                try:
-                    send_message(bot, message)
-                except telegram.TelegramError as error:
-                    logger.error(SEND_ERROR.format(error=error))
-            time.sleep(RETRY_TIME)
+                send_message(bot, message)
+            except telegram.TelegramError as error:
+                logger.error(SEND_ERROR.format(error=error))
+        time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
