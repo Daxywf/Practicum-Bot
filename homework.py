@@ -39,10 +39,11 @@ CODE_IS_NOT_200 = (
 )
 SERVER_ERROR = (
     'Ошибка сервера.'
+    '{key} : {value}'
     'Эндпоинт: {url} '
     'Код ответа API: {code} '
     'Параметры запроса: {headers}, {params}'
-    'Ответ API: {answer}'
+
 )
 NEW_STATUS = 'Изменился статус проверки работы "{homework_name}". {verdict}'
 ERROR_MESSAGE = 'Сбой в работе программы: {error}'
@@ -51,6 +52,7 @@ MESSAGE_SENT = 'Бот отправил сообщение: {message}'
 UNEXPECTED_STATUS = 'Неожиданный статус: {status}'
 NO_KEY = 'Отсутствует ключ: {key}'
 RESPONSE_NOT_DICT = 'Ответ не является словарём'
+MISSING_VAR = 'Отсутствует одна из обязательных переменных окружения.'
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -93,7 +95,7 @@ def get_api_answer(current_timestamp):
     try:
         response = requests.get(**request_parameters)
     except RequestException as error:
-        raise RequestException(
+        raise ConnectionError(
             REQUEST_ERROR.format(
                 error=error,
                 **request_parameters,
@@ -102,14 +104,14 @@ def get_api_answer(current_timestamp):
     answer = response.json()
     if isinstance(answer, dict):  # Без этой строки код падают тесты от 08.11
         for key in ['code', 'error']:
-            if key in answer.keys():
+            if key in answer:
                 raise ServerError(
                     SERVER_ERROR.format(
                         **request_parameters,
-                        answer=answer
+                        key=key,
+                        value=answer[key]
                     )
                 )
-
     if response.status_code != 200:
         raise AnswerIsNot200Error(
             CODE_IS_NOT_200.format(
@@ -130,7 +132,7 @@ def check_response(response):
 def parse_status(homework):
     """Получает последнюю работу и формирует сообщение пользователю."""
     for key in ['status', 'homework_name']:
-        if key not in homework:  # Без проверки падает один из тестов
+        if key not in homework:  # parse_status_no status_key падает
             raise KeyError(NO_KEY.format(key=key))
     status = homework['status']
     if status not in VERDICTS:
@@ -154,24 +156,22 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     if not check_tokens() is True:
-        raise NameError(
-            'Отсутствует одна из обязательных переменных окружения.'
-        )
+        raise NameError(MISSING_VAR)
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time())
+    timestamp = int(time.time())
     while True:
         try:
-            answer = get_api_answer(ENDPOINT, current_timestamp)
+            answer = get_api_answer(ENDPOINT, timestamp)
             homework = check_response(answer)
             verdict = parse_status(homework)
             send_message(bot, verdict)
-            current_timestamp = answer['current_date'] or int(time.time())
+            timestamp = answer.get('current_date', timestamp)
         except Exception as error:
             message = ERROR_MESSAGE.format(error=error)
             logger.error(message)
             try:
                 send_message(bot, message)
-            except telegram.TelegramError as error:
+            except Exception as error:
                 logger.error(SEND_ERROR.format(error=error))
         time.sleep(RETRY_TIME)
 
