@@ -108,6 +108,7 @@ def get_api_answer(current_timestamp):
                 raise ServerError(
                     SERVER_ERROR.format(
                         **request_parameters,
+                        code=response.status_code,
                         key=key,
                         value=answer[key]
                     )
