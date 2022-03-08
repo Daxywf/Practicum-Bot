@@ -102,7 +102,7 @@ def get_api_answer(current_timestamp):
             )
         )
     answer = response.json()
-    if isinstance(answer, dict):  # Без этой строки код падают тесты от 08.11
+    if isinstance(answer, dict):
         for key in ['code', 'error']:
             if key in answer:
                 raise ServerError(
