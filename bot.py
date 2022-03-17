@@ -151,7 +151,7 @@ def check_tokens():
             message = MISSING_ENV_VARS.format(variable=name)
             logger.critical(message)
             return False
-        return True  # test_check_tokens_false падает при выбрасывании ошибок
+        return True
 
 
 def main():
