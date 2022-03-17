@@ -6,10 +6,10 @@
 
 ## Запуск и использование
 Требования: Python 3.7+
-- Клонировать репозиторий, перейти в него: ```git clone https://github.com/Daxywf/homework_bot``` ```cd homework_bot```
+- Клонировать репозиторий, перейти в него: ```git clone https://github.com/Daxywf/Practicum-Bot.git``` ```cd Practicum-Bot```
 - Обновить файл .env: Добавить токены (Телеграм и Яндекс.Практикум) и id чата Телеграм.
 - Установить зависимости: ```pip install -r requirements.txt```
-- Запустить файл homework.py
+- Запустить файл bot.py
 
 ## Автор
 
